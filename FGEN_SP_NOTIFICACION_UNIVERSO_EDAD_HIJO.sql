@@ -1,0 +1,320 @@
+ALTER PROCEDURE FGEN_SP_NOTIFICACION_UNIVERSO_EDAD_HIJO
+/****************************************************************************************/  
+/* Procedimiento: FGEN_SP_NOTIFICACION_UNIVERSO_EDAD_HIJO				       			*/
+/* Descripcion  : Obtiene los Hijos de los Empleados, que cumplan 18 y/o 26 años		*/
+/* Encargado    : Rene Gonzales		  													*/  
+/* Fecha y hora : 07/08/2014															*/
+/* Version		: 1.0.0																	*/
+/****************************************************************************************/
+	@ch_codigo_compania			CHAR(3)
+AS
+BEGIN
+	
+	SET NOCOUNT ON
+	SET DATEFIRST 1
+	IF	(	SELECT	CH_INDICADOR_SE_ENVIA_NOTIFICACION
+			FROM	FGEN_TA_DOCUMENTO_ESTADOS
+			WHERE	CH_CODIGO_COMPANIA			=	@ch_codigo_compania
+			AND		CH_CODIGO_HERRAMIENTA		=	'09'
+			AND		CH_CODIGO_DOCUMENTO			=	'007'
+			AND		CH_CODIGO_ESTADO_DOCUMENTO	=	'01'
+		)	=	'1'
+	BEGIN		
+		
+		--DECLARACION DE VARIABLES
+
+			DECLARE	@dt_Fecha_Actual			DATETIME,
+					@in_Inicio_Semana			INT,
+					@in_inicio_Mes				INT,
+					@ch_rol_centralizado		CHAR(3),
+					--@ch_rol_descentralizado		CHAR(3),
+					@ch_codigo_herramienta		CHAR(3),
+					@vc_ruta_adjunto			VARCHAR(200),
+					@vc_nombre_area				VARCHAR(280),
+					@in_codigo_vinculo_fam		INT
+
+			--SETEAMOS LOS VALORES
+			SELECT	@dt_Fecha_Actual			=	GETDATE(), --Fecha Actual
+					@ch_rol_centralizado		=	'003',
+					--@ch_rol_descentralizado	=	'013',
+					@ch_codigo_herramienta		=	'09',
+					@vc_nombre_area				=	'0'
+			
+			----Creamos tabla temporal de Administradores descentralizados
+			--CREATE TABLE #ADMINISTRADORES_DESCENTRALIZADO
+			--(
+			--	IN_CODIGO_SEDE		INT,
+			--	VC_CORREO			VARCHAR(256)	collate database_default
+			--)
+					
+			----insertamos los administradores descentralizados
+			--INSERT INTO #ADMINISTRADORES_DESCENTRALIZADO
+			--(
+			--	IN_CODIGO_SEDE	 ,
+			--	VC_CORREO			
+			--)
+			--SELECT	DISTINCT	IN_CODIGO_SEDE		= URH.IN_CODIGO_SEDE,
+			--					VC_CORREO			= U.VC_CORREO
+			--FROM	FGEN_TA_USUARIO_ROL_HERRAMIENTA URH (NOLOCK)
+			--INNER JOIN FGEN_TA_USUARIO	U (NOLOCK)
+			--ON		URH.IN_CODIGO_USUARIO		= U.IN_CODIGO_USUARIO
+			--WHERE	URH.CH_CODIGO_HERRAMIENTA	= @ch_codigo_herramienta
+			--	AND	URH.CH_CODIGO_ROL			= @CH_ROL_DESCENTRALIZADO
+			--	AND	URH.CH_INDICADOR_RESPONSABLE	= '1'
+			--	AND	URH.CH_SITUACION_REGISTRO		= 'A'
+			--	AND	U.CH_ESTADO						= 'A'
+			--	AND	U.CH_SITUACION_REGISTRO			= 'A'
+			
+			--Creamos tabla temporal de Administradores Centralizados	
+			CREATE TABLE #ADMINISTRADORES_RRHH
+			(
+				VC_CORREO			VARCHAR(256)	collate database_default
+			)
+
+			--insertamos los administradores descentralizados
+			INSERT INTO #ADMINISTRADORES_RRHH
+			(
+				VC_CORREO			
+			)
+			SELECT	DISTINCT VC_CORREO			= U.VC_CORREO
+			FROM	FGEN_TA_USUARIO_ROL_HERRAMIENTA URH (NOLOCK)
+			INNER JOIN FGEN_TA_USUARIO	U (NOLOCK)
+			ON		URH.IN_CODIGO_USUARIO		= U.IN_CODIGO_USUARIO
+			WHERE	URH.CH_CODIGO_HERRAMIENTA	= @ch_codigo_herramienta
+				AND	URH.CH_CODIGO_ROL			= @ch_rol_centralizado
+				--AND	URH.CH_INDICADOR_RESPONSABLE	= '1'
+				AND	URH.CH_SITUACION_REGISTRO		= 'A'
+				AND	U.CH_ESTADO						= 'A'
+				AND	U.CH_SITUACION_REGISTRO			= 'A'
+				
+			--GENERAMOS EL EXCEL
+			
+			CREATE TABLE #FTEMP_TA_UNIVERSO_HIJO_CRP
+			(
+				IN_CODIGO_FAMILIAR					INT,
+				IN_CODIGO_VINCULO					INT,
+				IN_CODIGO_EMPLEADO					INT,
+				VC_IDENTIFICADOR					VARCHAR(20),
+				VC_NOMBRE_COMPLETO_EMP				VARCHAR(128),
+				VC_VALOR_REFERENCIA					VARCHAR(20),
+				VC_NUMERO_DOCUMENTO_IDENTIDAD		VARCHAR(128),
+				VC_NOMBRE_COMPLETO_FAM				VARCHAR(128),
+				DT_FECHA_NACIMIENTO					VARCHAR(10),
+				VC_EDAD								VARCHAR(18)
+			)
+
+			INSERT INTO #FTEMP_TA_UNIVERSO_HIJO_CRP
+			(
+				IN_CODIGO_FAMILIAR,
+				IN_CODIGO_VINCULO,
+				IN_CODIGO_EMPLEADO,
+				VC_IDENTIFICADOR,
+				VC_NOMBRE_COMPLETO_EMP,
+				VC_VALOR_REFERENCIA,
+				VC_NUMERO_DOCUMENTO_IDENTIDAD,
+				VC_NOMBRE_COMPLETO_FAM,
+				DT_FECHA_NACIMIENTO,
+				VC_EDAD
+			)
+			SELECT	F.IN_CODIGO_FAMILIAR,
+					F.IN_CODIGO_VINCULO,
+					F.IN_CODIGO_EMPLEADO,
+					E.VC_IDENTIFICADOR,
+					E.VC_NOMBRE_COMPLETO,
+					G.VC_VALOR_REFERENCIA,
+					F.VC_NUMERO_DOCUMENTO_IDENTIDAD,
+					F.VC_NOMBRE_COMPLETO,
+					(CONVERT(VARCHAR(10), F.DT_FECHA_NACIMIENTO,103)),
+					DATEDIFF(YEAR,F.DT_FECHA_NACIMIENTO,GETDATE()) AS 'EDAD'
+			FROM FPER_TA_EMPLEADO_FAMILIAR F
+			INNER JOIN FPER_TA_EMPLEADO E
+			ON E.IN_CODIGO_EMPLEADO = F.IN_CODIGO_EMPLEADO 
+			INNER JOIN FGEN_TA_GENERAL G
+			ON G.IN_CODIGO_GENERAL = F.IN_CODIGO_VINCULO 
+			WHERE F.IN_CODIGO_VINCULO = G.IN_CODIGO_GENERAL
+			AND F.CH_SITUACION_REGISTRO = 'A'
+			AND E.CH_CODIGO_COMPANIA = @ch_codigo_compania
+			AND G.CH_CODIGO_TABLA = '015' 			
+			AND G.VC_CODIGO_REFERENCIA = 'S'
+			AND E.CH_SITUACION_REGISTRO = 'A'
+			AND E.CH_CODIGO_ESTADO_EMPLEADO IN ('AC','LS','LC')
+			AND DAY(F.DT_FECHA_NACIMIENTO) = DAY(GETDATE())
+			AND MONTH(F.DT_FECHA_NACIMIENTO) = MONTH(GETDATE())
+			AND (
+				(DATEDIFF(YEAR,F.DT_FECHA_NACIMIENTO,GETDATE())) = '18'
+				OR (DATEDIFF(YEAR,F.DT_FECHA_NACIMIENTO,GETDATE())) = '26'
+				)
+			
+			
+		-- Configuramos el correo si es que hay cumpleaños este dia
+		IF EXISTS (	SELECT 1 
+					FROM #FTEMP_TA_UNIVERSO_HIJO_CRP	
+					)
+		BEGIN
+				
+			DECLARE @IN_CODIGO_FAMILIAR					INT,
+					@IN_CODIGO_VINCULO					INT,
+					@IN_CODIGO_EMPLEADO_CUR				INT,
+					@VC_IDENTIFICADOR					VARCHAR(20),
+					@VC_NOMBRE_COMPLETO_EMP				VARCHAR(128),
+					@VC_VALOR_REFERENCIA				VARCHAR(20),
+					@VC_NUMERO_DOCUMENTO_IDENTIDAD		VARCHAR(128),
+					@VC_NOMBRE_COMPLETO_FAM				VARCHAR(128),
+					@DT_FECHA_NACIMIENTO				VARCHAR(10),
+					@VC_EDAD							VARCHAR(18)
+
+
+			--GENERAMOS LOS CORREOS
+			--Construimos la cabecera del excel
+			DECLARE @NVCABECERAEXCEL NVARCHAR(MAX)
+			SET @NVCABECERAEXCEL =
+					N'<table border="1">' +
+					N'<tr>' + 
+					N'<th>CUC</th>' +
+					N'<th>NOMBRE COMPLETO EMPLEADO</th>' + 
+					N'<th>TIPO VINCULO</th>' +
+					N'<th>DOC. IDENTIDAD FAMILIAR</th>' + 
+					N'<th>NOMBRE COMPLETO FAMILIAR</th>' +
+					N'<th>FECHA NACIMIENTO</th>' +
+					N'<th>EDAD A CUMPLIR</th>' +
+					N'</tr>' 
+			
+			DECLARE @vc_contenido_adjuntar		VARCHAR(MAX),
+					@vc_server_name				VARCHAR(50),
+					@vc_dbname					VARCHAR(60),
+					@vc_file_type				VARCHAR(5)
+
+			-- SETEAR VALORES
+			SELECT	@vc_contenido_adjuntar		=	'',
+					@vc_server_name				=	@@SERVERNAME,
+					@vc_dbname					=	DB_NAME(),
+					@vc_file_type				=	'xls'
+				
+				
+			--DECLARE @NVCABECERARESUMEN_CUR NVARCHAR(MAX),
+			DECLARE	@VC_NOMBRE_ARCHIVO_ADJUNTO	VARCHAR(250),
+					@VC_TABLA_TEMPORAL		VARCHAR(MAX),
+					@VC_CONTENIDO_ARCHIVO	VARCHAR(MAX)
+					
+			SET @VC_NOMBRE_ARCHIVO_ADJUNTO = 'EXCEL_HIJOS_18_26_ANHOS'
+							
+			DECLARE TEMP_CURSOR CURSOR FOR
+				SELECT	IN_CODIGO_FAMILIAR,
+						IN_CODIGO_VINCULO,
+						IN_CODIGO_EMPLEADO,
+						VC_IDENTIFICADOR,
+						VC_NOMBRE_COMPLETO_EMP,
+						VC_VALOR_REFERENCIA,
+						VC_NUMERO_DOCUMENTO_IDENTIDAD,
+						VC_NOMBRE_COMPLETO_FAM,
+						DT_FECHA_NACIMIENTO,
+						VC_EDAD
+				FROM #FTEMP_TA_UNIVERSO_HIJO_CRP
+
+			OPEN TEMP_CURSOR
+			FETCH NEXT FROM TEMP_CURSOR INTO	@IN_CODIGO_FAMILIAR,
+												@IN_CODIGO_VINCULO,
+												@IN_CODIGO_EMPLEADO_CUR,
+												@VC_IDENTIFICADOR,
+												@VC_NOMBRE_COMPLETO_EMP,
+												@VC_VALOR_REFERENCIA,
+												@VC_NUMERO_DOCUMENTO_IDENTIDAD,
+												@VC_NOMBRE_COMPLETO_FAM,
+												@DT_FECHA_NACIMIENTO,
+												@VC_EDAD
+
+			WHILE	@@FETCH_STATUS = 0                    
+				BEGIN 
+		
+					--Generamos el resumen
+					DECLARE @NVCABECERAEXCEL_CUR NVARCHAR(MAX)
+					SET @NVCABECERAEXCEL_CUR  = @NVCABECERAEXCEL
+
+					--SE COMENTA PARA CAMBIAR EL CONTENIDO DEL ADJUNTO
+
+					--SET @NVCABECERAEXCEL_CUR = @NVCABECERAEXCEL_CUR +
+					--	CAST ( (SELECT	td = ISNULL(VC_IDENTIFICADOR,SPACE(1))				, '',
+					--					td = ISNULL(VC_NOMBRE_COMPLETO_EMP,SPACE(1))		, '',
+					--					td = ISNULL(VC_VALOR_REFERENCIA,SPACE(1))	, '',
+					--					td = ISNULL(VC_NUMERO_DOCUMENTO_IDENTIDAD,SPACE(1))		, '',
+					--					td = ISNULL(VC_NOMBRE_COMPLETO_FAM,SPACE(1))		, '',
+					--					td = ISNULL(DT_FECHA_NACIMIENTO,SPACE(1))		, '',
+					--					td = ISNULL(VC_EDAD,SPACE(1)) , ''
+					--			FROM	#FTEMP_TA_UNIVERSO_HIJO_CRP
+					--	  FOR XML PATH('tr'), TYPE 
+					--) AS NVARCHAR(MAX) )
+
+					--SET @NVCABECERAEXCEL_CUR  = @NVCABECERAEXCEL_CUR + N'</table>'		
+
+					--SE COMENTA PARA CAMBIAR EL CONTENIDO DEL ADJUNTO
+						
+					--verificamos si existe la tabla TEMP_ARCHIVO
+					IF OBJECT_ID('TEMP_ARCHIVO') IS NOT NULL DROP TABLE TEMP_ARCHIVO
+					
+					IF (OBJECT_ID('TEMP_ARCHIVO_' + REPLACE(@VC_NOMBRE_ARCHIVO_ADJUNTO,'-','_')) IS NOT NULL)
+					BEGIN
+						SET @VC_TABLA_TEMPORAL = 'DROP TABLE TEMP_ARCHIVO_' +  REPLACE(@VC_NOMBRE_ARCHIVO_ADJUNTO,'-','_')
+						
+						EXEC (@VC_TABLA_TEMPORAL)
+					END
+
+					SET @VC_TABLA_TEMPORAL = 'SELECT VC_IDENTIFICADOR AS [CUC], 
+											VC_NOMBRE_COMPLETO_EMP AS [NOMBRE_COMPLETO EMPLEADO],
+											VC_VALOR_REFERENCIA AS [TIPO VINCULO],
+											VC_NUMERO_DOCUMENTO_IDENTIDAD AS [DOC. IDENTIDAD FAMILIAR],
+											VC_NOMBRE_COMPLETO_FAM AS [NOMBRE COMPLETO FAMILIAR],
+											VC_NOMBRE_RESPONSABLE_UNIDAD AS [NOMBRE RESPONSABLE UNIDAD], 
+											CONVERT(VARCHAR(10),DT_FECHA_NACIMIENTO,103) AS [FECHA NACIMIENTO],
+											VC_EDAD AS [EDAD]' + ' INTO TEMP_ARCHIVO_' + REPLACE(@VC_NOMBRE_ARCHIVO_ADJUNTO,'-','_') + ' ' + '
+											FROM	#FTEMP_TA_UNIVERSO_HIJO_CRP'
+
+					EXEC (@VC_TABLA_TEMPORAL)
+					
+					--llenamos la tabla TEMP_ARCHIVO con la información que se va adjuntar en un archivo excel
+					--SELECT VC_CONTENIDO_ARCHIVO = @NVCABECERAEXCEL_CUR INTO TEMP_ARCHIVO
+					----OR
+					--SET	@VC_TABLA_TEMPORAL = ''
+					--SET @VC_TABLA_TEMPORAL = 'SELECT VC_CONTENIDO_ARCHIVO = ''' + @NVCABECERAEXCEL_CUR + ''' INTO TEMP_ARCHIVO_' + REPLACE(@VC_NOMBRE_ARCHIVO_ADJUNTO,'-','_')
+					--EXEC (@VC_TABLA_TEMPORAL)
+					
+					--Generamos el archivo adjunto	
+					--OR
+					--SET @VC_CONTENIDO_ARCHIVO = N'SET NOCOUNT ON SELECT VC_CONTENIDO_ARCHIVO ' +  'FROM '+ 'TEMP_ARCHIVO_' + REPLACE(@VC_NOMBRE_ARCHIVO_ADJUNTO,'-','_')
+					SET @VC_CONTENIDO_ARCHIVO = N'SET NOCOUNT ON SELECT * ' +  'FROM '+ 'TEMP_ARCHIVO_' + REPLACE(@VC_NOMBRE_ARCHIVO_ADJUNTO,'-','_')
+				
+				FETCH NEXT FROM TEMP_CURSOR INTO	@IN_CODIGO_FAMILIAR,
+													@IN_CODIGO_VINCULO,
+													@IN_CODIGO_EMPLEADO_CUR,
+													@VC_IDENTIFICADOR,
+													@VC_NOMBRE_COMPLETO_EMP,
+													@VC_VALOR_REFERENCIA,
+													@VC_NUMERO_DOCUMENTO_IDENTIDAD,
+													@VC_NOMBRE_COMPLETO_FAM,
+													@DT_FECHA_NACIMIENTO,
+													@VC_EDAD
+				END
+			CLOSE TEMP_CURSOR
+			DEALLOCATE TEMP_CURSOR
+
+			DECLARE @vc_correo_adm_rrhh VARCHAR(MAX)
+			SET @vc_correo_adm_rrhh = ''
+
+			SELECT @vc_correo_adm_rrhh = @vc_correo_adm_rrhh + ';' + VC_CORREO FROM #ADMINISTRADORES_RRHH
+		
+			-- Enviamos el Correo 
+			--procedure para insertar mensaje contenido adjunto
+			EXEC FGEN_SP_INSERTAR_TA_NOTIFICACION_UNIVERSO_EDAD_HIJO	@ch_codigo_compania,
+																		@vc_correo_adm_rrhh,
+																		@vc_contenido_adjuntar,
+																		@vc_ruta_adjunto,
+																		'1',
+																		@VC_CONTENIDO_ARCHIVO,
+																		@VC_NOMBRE_ARCHIVO_ADJUNTO		
+
+			DROP TABLE #FTEMP_TA_UNIVERSO_HIJO_CRP
+			
+		END
+	END
+	
+END
+
